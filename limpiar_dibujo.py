@@ -20,7 +20,7 @@ for archivo in os.listdir(CARPETA_ENTRADA):
         continue
 
     # =====================================================
-    # ESCALA DE GRISES
+    # GRISES
     # =====================================================
 
     gris = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
@@ -32,7 +32,7 @@ for archivo in os.listdir(CARPETA_ENTRADA):
     blur = cv2.GaussianBlur(gris, (5,5), 0)
 
     # =====================================================
-    # BINARIZACIÓN
+    # BINARIZAR
     # =====================================================
 
     binaria = cv2.adaptiveThreshold(
@@ -45,7 +45,7 @@ for archivo in os.listdir(CARPETA_ENTRADA):
     )
 
     # =====================================================
-    # LIMPIEZA MORFOLÓGICA
+    # LIMPIEZA
     # =====================================================
 
     kernel = np.ones((2,2), np.uint8)
@@ -57,7 +57,7 @@ for archivo in os.listdir(CARPETA_ENTRADA):
     )
 
     # =====================================================
-    # ENGORDAR LÍNEAS
+    # ENGORDAR
     # =====================================================
 
     limpio = cv2.dilate(
@@ -67,39 +67,86 @@ for archivo in os.listdir(CARPETA_ENTRADA):
     )
 
     # =====================================================
-    # INVERTIR
-    # =====================================================
-
-    final = 255 - limpio
-
-    # =====================================================
-    # ELIMINAR BORDE INFERIOR
-    # =====================================================
-
-    alto, ancho = final.shape
-
-    final[int(alto * 0.92):alto, :] = 255
-
-    # =====================================================
-    # ELIMINAR PUNTOS PEQUEÑOS
+    # COMPONENTES
     # =====================================================
 
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
-        255 - final,
+        limpio,
         connectivity=8
     )
 
-    resultado = np.ones_like(final) * 255
+    alto_total, ancho_total = limpio.shape
+
+    mejor_area = 0
+    mejor_x = 0
+    mejor_y = 0
+    mejor_w = ancho_total
+    mejor_h = alto_total
+
+    # =====================================================
+    # BUSCAR EL DIBUJO PRINCIPAL
+    # =====================================================
 
     for i in range(1, num_labels):
 
+        x = stats[i, cv2.CC_STAT_LEFT]
+        y = stats[i, cv2.CC_STAT_TOP]
+        w = stats[i, cv2.CC_STAT_WIDTH]
+        h = stats[i, cv2.CC_STAT_HEIGHT]
         area = stats[i, cv2.CC_STAT_AREA]
 
-        if area > 40:
+        if area < 250:
+            continue
 
-            resultado[labels == i] = 0
+        if w < ancho_total * 0.35:
+            continue
 
-    final = resultado
+        if h < alto_total * 0.35:
+            continue
+
+        if area > mejor_area:
+
+            mejor_area = area
+
+            mejor_x = x
+            mejor_y = y
+            mejor_w = w
+            mejor_h = h
+
+    # =====================================================
+    # MÁRGENES MÁS AMPLIOS
+    # =====================================================
+
+    margen_lateral =  70
+    margen_superior = 65
+    margen_inferior = 55
+
+    x1 = max(mejor_x - margen_lateral, 0)
+    y1 = max(mejor_y - margen_superior, 0)
+
+    x2 = min(mejor_x + mejor_w + margen_lateral, ancho_total)
+    y2 = min(mejor_y + mejor_h + margen_inferior, alto_total)
+
+    recorte = limpio[y1:y2, x1:x2]
+
+    # =====================================================
+    # ELIMINAR RESTOS ARRIBA
+    # =====================================================
+
+    alto_recorte = recorte.shape[0]
+
+    banda_superior = int(alto_recorte * 0.08)
+
+    recorte[0:banda_superior, :] = cv2.medianBlur(
+        recorte[0:banda_superior, :],
+        9
+    )
+
+    # =====================================================
+    # INVERTIR
+    # =====================================================
+
+    final = 255 - recorte
 
     # =====================================================
     # GUARDAR
