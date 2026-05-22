@@ -3,176 +3,98 @@ import numpy as np
 import os
 import json
 
-CARPETA = "recortes"
+# ==========================================
+# CARPETAS
+# ==========================================
 
-# ============================================
-# DETECTAR LINEAS
-# ============================================
+CARPETA_BASE = "BASE"
+CARPETA_RECORTES = "recortes"
 
-def detectar_lineas(img):
+# ==========================================
+# FUNCION PARA COMPARAR FORMAS
+# ==========================================
 
-    gris = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+def comparar_imagenes(img1, img2):
 
-    _, thresh = cv2.threshold(
-        gris,
-        180,
-        255,
-        cv2.THRESH_BINARY_INV
-    )
+    img1 = cv2.resize(img1, (300, 300))
+    img2 = cv2.resize(img2, (300, 300))
 
-    lineas = cv2.HoughLinesP(
-        thresh,
-        1,
-        np.pi / 180,
-        threshold=20,
-        minLineLength=15,
-        maxLineGap=8
-    )
+    gris1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+    gris2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
 
-    horizontales = 0
-    verticales = 0
+    _, th1 = cv2.threshold(gris1, 200, 255, cv2.THRESH_BINARY_INV)
+    _, th2 = cv2.threshold(gris2, 200, 255, cv2.THRESH_BINARY_INV)
 
-    diagonales_largas = 0
+    contornos1, _ = cv2.findContours(th1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contornos2, _ = cv2.findContours(th2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    puntos_verticales = []
-    puntos_horizontales = []
+    if not contornos1 or not contornos2:
+        return 999999
 
-    if lineas is None:
-        return None
+    c1 = max(contornos1, key=cv2.contourArea)
+    c2 = max(contornos2, key=cv2.contourArea)
 
-    for linea in lineas:
+    score = cv2.matchShapes(c1, c2, 1, 0.0)
 
-        x1, y1, x2, y2 = linea[0]
+    return score
 
-        dx = x2 - x1
-        dy = y2 - y1
+# ==========================================
+# CARGAR BASE
+# ==========================================
 
-        longitud = np.sqrt(dx*dx + dy*dy)
+base_modelos = []
 
-        angulo = np.degrees(np.arctan2(dy, dx))
+for carpeta in os.listdir(CARPETA_BASE):
 
-        # ----------------------------------------
-        # HORIZONTALES
-        # ----------------------------------------
+    ruta_carpeta = os.path.join(CARPETA_BASE, carpeta)
 
-        if abs(angulo) < 10:
+    if os.path.isdir(ruta_carpeta):
 
-            horizontales += 1
+        for archivo in os.listdir(ruta_carpeta):
 
-        # ----------------------------------------
-        # VERTICALES
-        # ----------------------------------------
+            if archivo.endswith(".png"):
 
-        elif abs(angulo) > 80:
+                ruta_imagen = os.path.join(ruta_carpeta, archivo)
 
-            verticales += 1
+                img = cv2.imread(ruta_imagen)
 
-        # ----------------------------------------
-        # DIAGONALES
-        # ----------------------------------------
+                if img is not None:
 
-        elif 20 < abs(angulo) < 70:
+                    base_modelos.append({
+                        "modelo": carpeta,
+                        "imagen": img
+                    })
 
-            # diagonales largas = OB
-            if longitud > 80:
-                diagonales_largas += 1
+# ==========================================
+# ANALIZAR RECORTES
+# ==========================================
 
-            # diagonales pequeñas = puntas flechas
-            else:
+for archivo in os.listdir(CARPETA_RECORTES):
 
-                centro_x = int((x1 + x2) / 2)
-                centro_y = int((y1 + y2) / 2)
+    if archivo.endswith(".png"):
 
-                # flechas verticales
-                if abs(angulo) > 40:
-                    puntos_verticales.append((centro_x, centro_y))
+        ruta = os.path.join(CARPETA_RECORTES, archivo)
 
-                # flechas horizontales
-                else:
-                    puntos_horizontales.append((centro_x, centro_y))
+        img_recorte = cv2.imread(ruta)
 
-    return {
-        "horizontales": horizontales,
-        "verticales": verticales,
-        "diagonales_largas": diagonales_largas,
-        "puntos_verticales": puntos_verticales,
-        "puntos_horizontales": puntos_horizontales,
-        "ancho": img.shape[1]
-    }
+        mejor_modelo = "DESCONOCIDO"
+        mejor_score = 999999
 
-# ============================================
-# DETECTOR MODELOS
-# ============================================
+        for modelo_base in base_modelos:
 
-def detectar_modelo(datos):
+            score = comparar_imagenes(
+                img_recorte,
+                modelo_base["imagen"]
+            )
 
-    diagonales = datos["diagonales_largas"]
+            if score < mejor_score:
 
-    pv = datos["puntos_verticales"]
-    ph = datos["puntos_horizontales"]
-
-    ancho = datos["ancho"]
-
-    # ========================================
-    # OB
-    # ========================================
-
-    if diagonales >= 4:
-        return "OB"
-
-    # ========================================
-    # COR
-    # ========================================
-
-    if len(ph) >= 2:
-        return "COR_SIMPLE_2H_SP"
-
-    # ========================================
-    # ELV / EVO
-    # ========================================
-
-    if len(pv) >= 2:
-
-        xs = [p[0] for p in pv]
-
-        media_x = np.mean(xs)
-
-        centro = ancho / 2
-
-        # símbolo centrado = ELV
-        if abs(media_x - centro) < 60:
-            return "ELV_SP"
-
-        # símbolo lateral = EVO
-        else:
-            return "EVOI_SP"
-
-    return "DESCONOCIDO"
-
-# ============================================
-# RECORRER CARPETA
-# ============================================
-
-for archivo in os.listdir(CARPETA):
-
-    if archivo.lower().endswith(".png"):
-
-        ruta = os.path.join(CARPETA, archivo)
-
-        img = cv2.imread(ruta)
-
-        datos = detectar_lineas(img)
-
-        if datos is None:
-            continue
-
-        modelo = detectar_modelo(datos)
+                mejor_score = score
+                mejor_modelo = modelo_base["modelo"]
 
         resultado = {
-            "modelo": modelo,
-            "diagonales_largas": datos["diagonales_largas"],
-            "flechas_verticales": len(datos["puntos_verticales"]),
-            "flechas_horizontales": len(datos["puntos_horizontales"])
+            "modelo": mejor_modelo,
+            "score": round(float(mejor_score), 5)
         }
 
         print("\n====================================")
