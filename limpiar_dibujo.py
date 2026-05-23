@@ -1,73 +1,42 @@
 import cv2
-import numpy as np
+import os
 
-# =====================================================
-# CARGAR FOTO NUEVA RECIBIDA DESDE TALLY
-# =====================================================
+# -----------------------------
+# BORRAR FOTO LIMPIA ANTERIOR
+# -----------------------------
+if os.path.exists("foto_limpia.png"):
+    os.remove("foto_limpia.png")
 
-imagen = cv2.imread("foto_recibida.jpg")
+# -----------------------------
+# CARGAR IMAGEN
+# -----------------------------
+img = cv2.imread("foto_recibida.jpg")
 
-if imagen is None:
+if img is None:
     print("ERROR: no existe foto_recibida.jpg")
     exit()
 
-# =====================================================
-# GRISES
-# =====================================================
+# -----------------------------
+# ESCALA GRISES
+# -----------------------------
+gris = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-gris = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
-
-# =====================================================
-# SUAVIZADO
-# =====================================================
-
+# -----------------------------
+# LIMPIEZA
+# -----------------------------
 blur = cv2.GaussianBlur(gris, (5,5), 0)
 
-# =====================================================
-# BINARIZAR
-# =====================================================
-
-binaria = cv2.adaptiveThreshold(
+# binario invertido
+_, th = cv2.threshold(
     blur,
+    180,
     255,
-    cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-    cv2.THRESH_BINARY_INV,
-    31,
-    12
+    cv2.THRESH_BINARY_INV
 )
 
-# =====================================================
-# LIMPIEZA
-# =====================================================
+# -----------------------------
+# GUARDAR
+# -----------------------------
+cv2.imwrite("foto_limpia.png", th)
 
-kernel = np.ones((2,2), np.uint8)
-
-limpio = cv2.morphologyEx(
-    binaria,
-    cv2.MORPH_OPEN,
-    kernel
-)
-
-# =====================================================
-# ENGORDAR LÍNEAS
-# =====================================================
-
-limpio = cv2.dilate(
-    limpio,
-    kernel,
-    iterations=1
-)
-
-# =====================================================
-# INVERTIR
-# =====================================================
-
-final = 255 - limpio
-
-# =====================================================
-# GUARDAR FOTO LIMPIA
-# =====================================================
-
-cv2.imwrite("foto_limpia.png", final)
-
-print("FOTO LIMPIADA")
+print("FOTO LIMPIA GENERADA")
