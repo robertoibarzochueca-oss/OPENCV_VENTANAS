@@ -41,9 +41,9 @@ def procesar():
     # EJECUTAR SCRIPTS
     # =====================================================
 
-    os.system("python separar-ventanas.py")
+    os.system("py separar-ventanas.py")
 
-    os.system("python limpiar_dibujo.py")
+    os.system("py limpiar_dibujo.py")
 
     print("PROCESO TERMINADO")
 
