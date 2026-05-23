@@ -34,10 +34,14 @@ if imagen is None:
     exit()
 
 # =====================================================
-# NORMALIZAR ILUMINACIÓN
+# ESCALA DE GRISES
 # =====================================================
 
 gris = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
+
+# =====================================================
+# FILTRADO
+# =====================================================
 
 filtrada = cv2.bilateralFilter(
     gris,
@@ -65,7 +69,7 @@ binaria = cv2.adaptiveThreshold(
 
 kernel = cv2.getStructuringElement(
     cv2.MORPH_RECT,
-    (3, 3)
+    (5, 5)
 )
 
 binaria = cv2.morphologyEx(
@@ -75,30 +79,40 @@ binaria = cv2.morphologyEx(
 )
 
 # =====================================================
+# DILATAR UN POCO
+# =====================================================
+
+binaria = cv2.dilate(
+    binaria,
+    kernel,
+    iterations=1
+)
+
+# =====================================================
 # DETECTAR LÍNEAS
 # =====================================================
 
 alto, ancho = binaria.shape[:2]
 
-longitud_minima = int(min(alto, ancho) * 0.12)
+longitud_minima = int(min(alto, ancho) * 0.10)
 
 lineas = cv2.HoughLinesP(
     binaria,
     rho=1,
     theta=np.pi / 180,
-    threshold=50,
+    threshold=40,
     minLineLength=longitud_minima,
-    maxLineGap=20
+    maxLineGap=40
 )
 
 # =====================================================
-# LIENZO LIMPIO
+# LIENZO BLANCO
 # =====================================================
 
 lienzo = np.ones_like(imagen) * 255
 
 # =====================================================
-# DIBUJAR GEOMETRÍA
+# DIBUJAR CAPAS
 # =====================================================
 
 if lineas is not None:
@@ -114,19 +128,19 @@ if lineas is not None:
             ) * 180 / np.pi
         )
 
-        # =============================================
+        # =================================================
         # HORIZONTALES / VERTICALES
-        # =============================================
+        # =================================================
 
         if angulo < 15 or angulo > 165 or 75 < angulo < 105:
 
             color = (0, 255, 0)
 
-            # =========================================
+            # =============================================
             # POSIBLE PERSIANA
-            # =========================================
+            # =============================================
 
-            if y1 < alto * 0.18 and y2 < alto * 0.18:
+            if y1 < alto * 0.20 and y2 < alto * 0.20:
                 color = (0, 255, 255)
 
             cv2.line(
@@ -137,9 +151,9 @@ if lineas is not None:
                 3
             )
 
-        # =============================================
+        # =================================================
         # DIAGONALES
-        # =============================================
+        # =================================================
 
         elif 20 < angulo < 70 or 110 < angulo < 160:
 
@@ -152,7 +166,7 @@ if lineas is not None:
             )
 
 # =====================================================
-# DETECTAR CONTORNOS GRANDES
+# DETECTAR CONTORNOS
 # =====================================================
 
 gris_lienzo = cv2.cvtColor(
@@ -176,33 +190,38 @@ contornos, _ = cv2.findContours(
 contador = 1
 
 # =====================================================
-# RECORTAR VENTANAS
+# BUSCAR POSIBLES VENTANAS
 # =====================================================
 
 for c in contornos:
 
     area = cv2.contourArea(c)
 
-    if area < 50000:
+    if area < 30000:
         continue
 
-    perimetro = cv2.arcLength(c, True)
+    x, y, w, h = cv2.boundingRect(c)
 
-    approx = cv2.approxPolyDP(
-        c,
-        0.02 * perimetro,
-        True
-    )
+    # =================================================
+    # FILTROS DE TAMAÑO
+    # =================================================
 
-    if len(approx) != 4:
+    if w < 250:
         continue
 
-    x, y, w, h = cv2.boundingRect(approx)
-
-    if w < 300 or h < 300:
+    if h < 250:
         continue
 
-    margen = 20
+    ratio = w / h
+
+    if ratio < 0.4 or ratio > 3:
+        continue
+
+    # =================================================
+    # MÁRGENES
+    # =================================================
+
+    margen = 25
 
     x1 = max(x - margen, 0)
     y1 = max(y - margen, 0)
@@ -214,36 +233,52 @@ for c in contornos:
 
     recorte_color = lienzo[y1:y2, x1:x2]
 
-    # =============================================
-    # GUARDAR ORIGINAL
-    # =============================================
+    # =================================================
+    # DIBUJAR MARCO ROJO
+    # =================================================
 
-    nombre_original = os.path.join(
+    cv2.rectangle(
+        recorte_color,
+        (0, 0),
+        (recorte_color.shape[1]-1, recorte_color.shape[0]-1),
+        (0, 0, 255),
+        4
+    )
+
+    # =================================================
+    # GUARDAR ORIGINAL
+    # =================================================
+
+    ruta_original = os.path.join(
         CARPETA_RECORTES,
         f"ventana_{contador}.png"
     )
 
     cv2.imwrite(
-        nombre_original,
+        ruta_original,
         recorte_original
     )
 
-    # =============================================
+    # =================================================
     # GUARDAR COLOREADA
-    # =============================================
+    # =================================================
 
-    nombre_color = os.path.join(
+    ruta_color = os.path.join(
         CARPETA_RESULTADO,
         f"ventana_color_{contador}.png"
     )
 
     cv2.imwrite(
-        nombre_color,
+        ruta_color,
         recorte_color
     )
 
-    print(f"✅ Ventana {contador}")
+    print(f"✅ Ventana detectada: {contador}")
 
     contador += 1
+
+# =====================================================
+# RESULTADO FINAL
+# =====================================================
 
 print(f"\nTOTAL VENTANAS: {contador - 1}")
