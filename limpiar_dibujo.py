@@ -1,42 +1,74 @@
 import cv2
+import numpy as np
 import os
 
-# -----------------------------
-# BORRAR FOTO LIMPIA ANTERIOR
-# -----------------------------
-if os.path.exists("foto_limpia.png"):
-    os.remove("foto_limpia.png")
+# ==========================================
+# CARGAR FOTO
+# ==========================================
 
-# -----------------------------
-# CARGAR IMAGEN
-# -----------------------------
-img = cv2.imread("foto_recibida.jpg")
+img = cv2.imread("foto_recibida.png")
 
 if img is None:
-    print("ERROR: no existe foto_recibida.jpg")
+    print("ERROR: no existe foto_recibida.png")
     exit()
 
-# -----------------------------
+# ==========================================
 # ESCALA GRISES
-# -----------------------------
+# ==========================================
+
 gris = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-# -----------------------------
-# LIMPIEZA
-# -----------------------------
+# ==========================================
+# SUAVIZAR
+# ==========================================
+
 blur = cv2.GaussianBlur(gris, (5,5), 0)
 
-# binario invertido
-_, th = cv2.threshold(
+# ==========================================
+# THRESHOLD ADAPTATIVO
+# ==========================================
+
+binaria = cv2.adaptiveThreshold(
     blur,
-    180,
     255,
-    cv2.THRESH_BINARY_INV
+    cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+    cv2.THRESH_BINARY_INV,
+    21,
+    8
 )
 
-# -----------------------------
+# ==========================================
+# LIMPIAR RUIDO
+# ==========================================
+
+kernel = np.ones((3,3), np.uint8)
+
+limpia = cv2.morphologyEx(
+    binaria,
+    cv2.MORPH_OPEN,
+    kernel
+)
+
+# ==========================================
+# ENGORDAR LINEAS
+# ==========================================
+
+limpia = cv2.dilate(
+    limpia,
+    kernel,
+    iterations=1
+)
+
+# ==========================================
+# INVERTIR
+# ==========================================
+
+final = 255 - limpia
+
+# ==========================================
 # GUARDAR
-# -----------------------------
-cv2.imwrite("foto_limpia.png", th)
+# ==========================================
+
+cv2.imwrite("foto_limpia.png", final)
 
 print("FOTO LIMPIA GENERADA")
